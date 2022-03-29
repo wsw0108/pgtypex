@@ -5,18 +5,19 @@ import (
 	"database/sql/driver"
 	"fmt"
 
-	wktparser "github.com/Succo/wktToOrb"
 	"github.com/jackc/pgtype"
-	"github.com/paulmach/orb"
-	"github.com/paulmach/orb/encoding/wkb"
-	"github.com/paulmach/orb/encoding/wkt"
+	"github.com/twpayne/go-geom"
+	"github.com/twpayne/go-geom/encoding/wkb"
+	"github.com/twpayne/go-geom/encoding/wkt"
 )
 
+var byteOrder = wkb.NDR
+
 type Geometry struct {
-	Geom orb.Geometry
+	Geom geom.T
 }
 
-func NewGeometry(geom orb.Geometry) *Geometry {
+func NewGeometry(geom geom.T) *Geometry {
 	return &Geometry{geom}
 }
 
@@ -27,18 +28,18 @@ func (dst *Geometry) Set(src interface{}) error {
 
 	switch value := src.(type) {
 	case string:
-		geom, err := wktparser.Scan(value)
+		g, err := wkt.Unmarshal(value)
 		if err != nil {
 			return err
 		}
-		dst.Geom = geom
+		dst.Geom = g
 	case []byte:
 		geom, err := wkb.Unmarshal(value)
 		if err != nil {
 			return err
 		}
 		dst.Geom = geom
-	case orb.Geometry:
+	case geom.T:
 		// TODO: clone?
 		dst.Geom = value
 	default:
@@ -63,14 +64,13 @@ func (Geometry) PreferredParamFormat() int16 {
 func (src Geometry) EncodeText(ci *pgtype.ConnInfo, buf []byte) ([]byte, error) {
 	// FIXME: use buf
 	// w := bytes.NewBuffer(buf)
-	wktString := wkt.MarshalString(src.Geom)
-	return []byte(wktString), nil
+	wktString, err := wkt.Marshal(src.Geom)
+	return []byte(wktString), err
 }
 
 func (src Geometry) EncodeBinary(ci *pgtype.ConnInfo, buf []byte) ([]byte, error) {
 	w := bytes.NewBuffer(buf)
-	enc := wkb.NewEncoder(w)
-	if err := enc.Encode(src.Geom); err != nil {
+	if err := wkb.Write(w, byteOrder, src.Geom); err != nil {
 		return nil, err
 	}
 	return w.Bytes(), nil
@@ -86,7 +86,7 @@ func (dst *Geometry) DecodeText(ci *pgtype.ConnInfo, src []byte) error {
 	}
 
 	wktString := string(src)
-	geom, err := wktparser.Scan(wktString)
+	geom, err := wkt.Unmarshal(wktString)
 	if err != nil {
 		return err
 	}
@@ -117,7 +117,7 @@ func (dst *Geometry) Scan(src interface{}) error {
 
 	switch src := src.(type) {
 	case string:
-		geom, err := wktparser.Scan(src)
+		geom, err := wkt.Unmarshal(src)
 		if err != nil {
 			return err
 		}
@@ -126,12 +126,11 @@ func (dst *Geometry) Scan(src interface{}) error {
 	case []byte:
 		srcCopy := make([]byte, len(src))
 		copy(srcCopy, src)
-		s := wkb.Scanner(nil)
-		err := s.Scan(srcCopy)
+		g, err := wkb.Unmarshal(srcCopy)
 		if err != nil {
 			return err
 		}
-		dst.Geom = s.Geometry
+		dst.Geom = g
 		return nil
 	}
 
@@ -143,5 +142,5 @@ func (src Geometry) Value() (driver.Value, error) {
 	if src.Geom == nil {
 		return nil, nil
 	}
-	return wkb.Marshal(src.Geom)
+	return wkb.Marshal(src.Geom, byteOrder)
 }

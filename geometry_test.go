@@ -5,12 +5,12 @@ import (
 	"testing"
 
 	"github.com/jackc/pgtype"
-	"github.com/paulmach/orb"
+	"github.com/twpayne/go-geom"
 )
 
 func TestGeometry_EncodeBinary(t *testing.T) {
 	type fields struct {
-		geom orb.Geometry
+		g geom.T
 	}
 	type args struct {
 		ci  *pgtype.ConnInfo
@@ -25,7 +25,7 @@ func TestGeometry_EncodeBinary(t *testing.T) {
 	}{
 		{
 			name:   "encode return updated buf",
-			fields: fields{geom: orb.Point{113.68328500000001, 31.257848300000003}},
+			fields: fields{g: geom.NewPointFlat(geom.XY, []float64{113.68328500000001, 31.257848300000003})},
 			args:   args{nil, make([]byte, 0, 32)},
 			want:   []byte{1, 1, 0, 0, 0, 60, 54, 2, 241, 186, 107, 92, 64, 71, 212, 159, 88, 2, 66, 63, 64},
 		},
@@ -33,7 +33,7 @@ func TestGeometry_EncodeBinary(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := &Geometry{
-				Geom: tt.fields.geom,
+				Geom: tt.fields.g,
 			}
 			got, err := g.EncodeBinary(tt.args.ci, tt.args.buf)
 			if (err != nil) != tt.wantErr {
